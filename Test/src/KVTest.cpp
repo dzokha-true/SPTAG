@@ -3,9 +3,34 @@
 
 #include "inc/Core/SPANN/ExtraFileController.h"
 #include "inc/Core/SPANN/IExtraSearcher.h"
+#include "inc/Helper/AerospikeKeyValueIO.h"
 #include "inc/Test.h"
 #include <chrono>
+#include <cctype>
+#include <cstdlib>
+#include <limits>
 #include <memory>
+#include <string>
+
+#ifndef SPTAG_AEROSPIKE_DEFAULT_HOST
+#define SPTAG_AEROSPIKE_DEFAULT_HOST "127.0.0.1"
+#endif
+
+#ifndef SPTAG_AEROSPIKE_DEFAULT_PORT
+#define SPTAG_AEROSPIKE_DEFAULT_PORT 3000
+#endif
+
+#ifndef SPTAG_AEROSPIKE_DEFAULT_NAMESPACE
+#define SPTAG_AEROSPIKE_DEFAULT_NAMESPACE "test"
+#endif
+
+#ifndef SPTAG_AEROSPIKE_DEFAULT_SET
+#define SPTAG_AEROSPIKE_DEFAULT_SET "sptag"
+#endif
+
+#ifndef SPTAG_AEROSPIKE_DEFAULT_BIN
+#define SPTAG_AEROSPIKE_DEFAULT_BIN "value"
+#endif
 
 // enable rocksdb io_uring
 
@@ -21,8 +46,57 @@
 using namespace SPTAG;
 using namespace SPTAG::SPANN;
 
+namespace
+{
+bool IsTruthyEnvValue(const char* value)
+{
+    if (value == nullptr)
+    {
+        return false;
+    }
+
+    std::string normalized(value);
+    for (char& ch : normalized)
+    {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on";
+}
+
+uint16_t ParseAerospikePort(const char* envPort, uint16_t fallback, bool* usedFallback)
+{
+    if (usedFallback != nullptr)
+    {
+        *usedFallback = false;
+    }
+
+    if (envPort == nullptr)
+    {
+        return fallback;
+    }
+
+    try
+    {
+        auto parsed = std::stoul(envPort);
+        if (parsed > 0 && parsed <= std::numeric_limits<uint16_t>::max())
+        {
+            return static_cast<uint16_t>(parsed);
+        }
+    }
+    catch (...)
+    {
+    }
+
+    if (usedFallback != nullptr)
+    {
+        *usedFallback = true;
+    }
+    return fallback;
+}
+} // namespace
+
 void Search(std::shared_ptr<Helper::KeyValueIO> db, int internalResultNum, int totalSize, int times, bool debug,
-            SPTAG::SPANN::ExtraWorkSpace &workspace)
+            SPTAG::SPANN::ExtraWorkSpace& workspace)
 {
     std::vector<SizeType> headIDs(internalResultNum, 0);
 
@@ -34,12 +108,15 @@ void Search(std::shared_ptr<Helper::KeyValueIO> db, int internalResultNum, int t
         for (int j = 0; j < internalResultNum; j++)
             headIDs[j] = (j + i * internalResultNum) % totalSize;
         auto t1 = std::chrono::high_resolution_clock::now();
-        db->MultiGet(headIDs, &values, MaxTimeout, &(workspace.m_diskRequests));
+        auto ret = db->MultiGet(headIDs, &values, MaxTimeout, &(workspace.m_diskRequests));
         auto t2 = std::chrono::high_resolution_clock::now();
         latency += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+        BOOST_REQUIRE_MESSAGE(ret == ErrorCode::Success, "Search MultiGet failed");
 
         if (debug)
         {
+            BOOST_REQUIRE_MESSAGE(values.size() >= static_cast<size_t>(internalResultNum),
+                                  "Search returned insufficient values");
             for (int j = 0; j < internalResultNum; j++)
             {
                 std::cout << values[j].substr(PageSize) << std::endl;
@@ -84,32 +161,100 @@ void Test(std::string path, std::string type, bool debug = false)
         }
 #endif
     }
+    else if (type == "Aerospike")
+    {
+        std::string host = SPTAG_AEROSPIKE_DEFAULT_HOST;
+        uint16_t port = static_cast<uint16_t>(SPTAG_AEROSPIKE_DEFAULT_PORT);
+        std::string ns = SPTAG_AEROSPIKE_DEFAULT_NAMESPACE;
+        std::string setName = SPTAG_AEROSPIKE_DEFAULT_SET;
+        std::string valueBin = SPTAG_AEROSPIKE_DEFAULT_BIN;
+        std::string user;
+        std::string password;
+
+        if (const char* envHost = std::getenv("SPTAG_AEROSPIKE_HOST"))
+            host = envHost;
+        if (const char* envPort = std::getenv("SPTAG_AEROSPIKE_PORT"))
+        {
+            bool usedFallback = false;
+            port = ParseAerospikePort(envPort, static_cast<uint16_t>(SPTAG_AEROSPIKE_DEFAULT_PORT), &usedFallback);
+            if (usedFallback)
+            {
+                std::cerr << "Invalid SPTAG_AEROSPIKE_PORT=\"" << envPort << "\". Falling back to default port "
+                          << SPTAG_AEROSPIKE_DEFAULT_PORT << std::endl;
+            }
+        }
+        if (const char* envNs = std::getenv("SPTAG_AEROSPIKE_NAMESPACE"))
+            ns = envNs;
+        if (const char* envSet = std::getenv("SPTAG_AEROSPIKE_SET"))
+            setName = envSet;
+        if (const char* envBin = std::getenv("SPTAG_AEROSPIKE_BIN"))
+            valueBin = envBin;
+        if (const char* envUser = std::getenv("SPTAG_AEROSPIKE_USER"))
+            user = envUser;
+        if (const char* envPassword = std::getenv("SPTAG_AEROSPIKE_PASSWORD"))
+            password = envPassword;
+
+        std::cout << "Aerospike config: host=" << host << " port=" << port << " namespace=" << ns
+                  << " set=" << setName << " bin=" << valueBin
+                  << " auth=" << (user.empty() ? "disabled" : "enabled") << std::endl;
+        db.reset(new Helper::AerospikeKeyValueIO(host, port, ns, setName, valueBin, user, password));
+    }
     else
     {
         db.reset(new FileIO(opt));
     }
 
+    BOOST_REQUIRE_MESSAGE(db->Available(), type + " backend is not available (connection failed)");
+
+    if (type == "Aerospike")
+    {
+        SizeType preflightKey = static_cast<SizeType>(totalNum + 4096);
+        std::string preflightValue = "aerospike_preflight_value";
+        auto preflightPut = db->Put(preflightKey, preflightValue, MaxTimeout, &(workspace.m_diskRequests));
+        BOOST_REQUIRE_MESSAGE(preflightPut == ErrorCode::Success, type + " preflight Put failed");
+
+        std::string preflightRead;
+        auto preflightGet = db->Get(preflightKey, &preflightRead, MaxTimeout, &(workspace.m_diskRequests));
+        BOOST_REQUIRE_MESSAGE(preflightGet == ErrorCode::Success && preflightRead == preflightValue,
+                              type + " preflight Get failed");
+
+        auto preflightDelete = db->Delete(preflightKey);
+        BOOST_REQUIRE_MESSAGE(preflightDelete == ErrorCode::Success, type + " preflight Delete failed");
+    }
+
+    int putFailures = 0;
     auto t1 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < totalNum; i++)
     {
         int len = std::to_string(i).length();
         std::string val(PageSize - len, '0');
-        db->Put(i, val, MaxTimeout, &(workspace.m_diskRequests));
+
+        if (db->Put(i, val, MaxTimeout, &(workspace.m_diskRequests)) != ErrorCode::Success)
+        {
+            std::cerr << type << " Put failed on key: " << i << std::endl;
+            ++putFailures;
+        }
     }
     auto t2 = std::chrono::high_resolution_clock::now();
     std::cout << "avg put time: "
               << (std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / (float)(totalNum)) << "us"
               << std::endl;
+    BOOST_CHECK_EQUAL(putFailures, 0);
 
     db->ForceCompaction();
 
+    int mergeFailures = 0;
     t1 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < totalNum; i++)
     {
         for (int j = 0; j < mergeIters; j++)
         {
-            db->Merge(i, std::to_string(i), MaxTimeout, &(workspace.m_diskRequests),
-                      [](const void* val, const int size) -> bool { return true; });
+            if (db->Merge(i, std::to_string(i), MaxTimeout, &(workspace.m_diskRequests),
+                          [](const void* val, const int size) -> bool { return true; }) != ErrorCode::Success)
+            {
+                std::cerr << type << " Merge failed on key: " << i << std::endl;
+                ++mergeFailures;
+            }
         }
     }
     t2 = std::chrono::high_resolution_clock::now();
@@ -117,18 +262,24 @@ void Test(std::string path, std::string type, bool debug = false)
               << (std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() /
                   (float)(totalNum * mergeIters))
               << "us" << std::endl;
+    BOOST_CHECK_EQUAL(mergeFailures, 0);
+
+    std::string value;
+    auto getResult = db->Get(0, &value, MaxTimeout, &(workspace.m_diskRequests));
+    BOOST_CHECK_MESSAGE(getResult == ErrorCode::Success && !value.empty(), type + " Get failed on key 0");
 
     Search(db, internalResultNum, totalNum, 10, debug, workspace);
 
+    auto deleteResult = db->Delete(0);
+    BOOST_CHECK_MESSAGE(deleteResult == ErrorCode::Success, type + " Delete failed on key 0");
+
+    std::string deletedValue;
+    auto deletedGetResult = db->Get(0, &deletedValue, MaxTimeout, &(workspace.m_diskRequests));
+    BOOST_CHECK_MESSAGE(deletedGetResult != ErrorCode::Success,
+                        type + " Delete validation failed: key 0 still exists");
+
     db->ForceCompaction();
     db->ShutDown();
-
-    // if (type == "RocksDB") {
-    //     db.reset(new RocksDBIO(path.c_str(), true));
-    //     Search(db, internalResultNum, totalNum, 10, debug);
-    //     db->ForceCompaction();
-    //     db->ShutDown();
-    // }
 }
 
 BOOST_AUTO_TEST_SUITE(KVTest)
@@ -152,6 +303,21 @@ BOOST_AUTO_TEST_CASE(FileTest)
     if (!direxists("tmp_file"))
         mkdir("tmp_file");
     Test(std::string("tmp_file") + FolderSep + "test", "File", false);
+}
+
+BOOST_AUTO_TEST_CASE(AerospikeTest)
+{
+#ifndef AEROSPIKE
+    BOOST_TEST_MESSAGE("Skipping KVTest/AerospikeTest: SPTAG was built without Aerospike support (-DAEROSPIKE=ON).");
+    return;
+#else
+    if (!IsTruthyEnvValue(std::getenv("SPTAG_RUN_AEROSPIKE_TEST")))
+    {
+        BOOST_TEST_MESSAGE("Skipping KVTest/AerospikeTest: set SPTAG_RUN_AEROSPIKE_TEST=1 to opt in.");
+        return;
+    }
+    Test(std::string("tmp_aerospike") + FolderSep + "test", "Aerospike", false);
+#endif
 }
 
 BOOST_AUTO_TEST_SUITE_END()
