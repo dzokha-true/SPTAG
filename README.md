@@ -205,6 +205,16 @@ Please cite SPTAG in your publications if it helps your research:
 }
 ```
 
+## **Fork documentation**
+
+Engineering docs for this fork (source map, build matrix, Aerospike KV contract, repo hygiene):
+
+- Start: [docs/guides/README.md](docs/guides/README.md)
+- Glossary: [CONTEXT.md](CONTEXT.md)
+- Safe changes: [docs/change-guide.md](docs/change-guide.md)
+
+Upstream tutorials remain in [docs/GettingStart.md](docs/GettingStart.md) and [docs/Parameters.md](docs/Parameters.md).
+
 ## **Contribute**
 
 This project welcomes contributions and suggestions from all the users.
