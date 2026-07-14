@@ -4,7 +4,7 @@
 # failure. Used by the frozen checks for issues #6/#7.
 set -euo pipefail
 
-BIN=/app/build/Test/SPTAGTest
+BIN=/app/Release/SPTAGTest
 
 if [ ! -x "$BIN" ]; then
     echo "FATAL: SPTAGTest binary missing at $BIN" >&2
