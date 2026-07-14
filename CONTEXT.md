@@ -46,6 +46,13 @@ One embedding inside a posting list. The unit distance is computed against durin
 
 In-process SPTAG search object after `LoadIndex`. Holds query-time head index state. Not the Aerospike server and not shared across processes unless each process loads its own copy.
 
+## Kernel table (server-side)
+
+Aerospike-server dispatch table over (ISA x value type x metric family) for
+tail-vector scoring. Selected once per server process from
+`AEROSPIKE_VECTOR_SIMD` (`auto|scalar|sse|avx2|avx512|neon`); no silent
+fallback. NEON is baseline on arm64; x86 rows are CPUID/XGETBV-gated.
+
 ## VECTOR_DISTANCE
 
 Aerospike operation that scores posting records for a query vector and returns owner-local scored results plus per-key statuses.

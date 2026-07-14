@@ -54,15 +54,22 @@ cluster_up() {
             "$SERVER_IMAGE" >/dev/null
         idx=$((idx+1))
     done
+    # Functional readiness: the service listener accepts connections only
+    # once startup (including initial partition balance) completes - more
+    # reliable than log-line grep and it is exactly what the legs need.
     for n in "${NODES[@]}"; do
         local ready=0
-        for _ in $(seq 1 90); do
-            if docker logs "$n" 2>&1 | grep -q "service ready: soon there will be cake"; then
+        for _ in $(seq 1 240); do
+            if docker exec "$n" bash -c '(exec 3<>/dev/tcp/127.0.0.1/3000) 2>/dev/null'; then
                 ready=1; break
+            fi
+            if [ -z "$(docker ps -q -f name=$n)" ]; then
+                echo "FATAL: $n exited during startup:" >&2
+                docker logs "$n" 2>&1 | tail -15 >&2; exit 1
             fi
             sleep 2
         done
-        [ "$ready" -eq 1 ] || { echo "FATAL: $n not ready" >&2
+        [ "$ready" -eq 1 ] || { echo "FATAL: $n service port never opened" >&2
             docker logs "$n" 2>&1 | tail -15 >&2; exit 1; }
     done
     # Let the mesh settle into one 3-node cluster.

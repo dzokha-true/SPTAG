@@ -25,6 +25,14 @@ Alternatives considered:
 
 ## Consequences
 
+- V1 is synchronous from SPTAG's perspective: `AerospikeKeyValueIO::
+  VectorDistance` issues one client call (`aerospike_vector_distance`, which
+  fans out per partition owner internally with `policy.concurrent`); the
+  `AsyncReadRequest` parameter is accepted but unused. Revisit only if the
+  measured request latency warrants pipelining across queries.
+- Verified end-to-end (run simd-vector-search): SPEC-4-INTEG-001 per-query
+  top-10 overlap 1.0000 vs the baseline path on a live 3-node cluster;
+  server-side kernel ISA logged (`neon` on arm64).
 - Quantized indexes are refused by the offload path (fail fast before any
   KV call): the wire query must be raw `dim * sizeof(ValueType)` bytes,
   while a quantizer encodes the query target to `IQuantizer::QuantizeSize()`

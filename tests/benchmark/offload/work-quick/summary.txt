@@ -1,0 +1,7 @@
+LEG baseline wall=0.29s qps=689.7 node_net_mb=156.1 avg_node_cpu_pct=0
+LEG offload-scalar wall=0.25s qps=800.0 node_net_mb=1.1 avg_node_cpu_pct=0
+LEG offload-neon wall=0.28s qps=714.3 node_net_mb=1.1 avg_node_cpu_pct=0
+queries=200 mean_overlap=1.0000 worst=1.0000 (query 0)
+PARITY_OK overlap=1.0000
+queries=200 mean_overlap=1.0000 worst=1.0000 (query 0)
+PARITY_OK overlap=1.0000

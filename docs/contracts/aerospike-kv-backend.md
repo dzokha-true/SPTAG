@@ -107,3 +107,20 @@ export SPTAG_RUN_AEROSPIKE_TEST=1
 - ANN graph storage or traversal in Aerospike
 - New server/client protocol for distance offload
 - Lua UDFs on the query path
+
+
+## Verified build & harness entry points (run simd-vector-search)
+
+- Docker image: `docker build -t sptag-offload-verify:check .` builds the
+  forked client from branch `ec528/modules-abs-path` (stock tarball removed),
+  fails loudly if the `aerospike_vector_distance.h` probe fails, and writes
+  `/app/build/offload_probe_ok` (`SPTAG_HAS_AEROSPIKE_VECTOR_DISTANCE=1`)
+  only on success. `/app/run-offload-tests.sh` runs the
+  `VectorDistanceOffloadTest` Boost suite (10 cases / 36 assertions).
+- End-to-end parity: `bash tests/integration/offload/run.sh` ->
+  `PARITY_OK overlap=1.0000` (SPEC-4-INTEG-001).
+- Benchmark: `bash tests/benchmark/offload/run.sh quick|full` ->
+  baseline vs offload-scalar vs offload-neon; results in
+  `docs/benchmarks/phase-4-results.md`.
+- arm64: the whole stack builds/runs on aarch64 (scalar client kernels);
+  see `docs/solutions/arm64-port-and-client-modules-path.md`.
