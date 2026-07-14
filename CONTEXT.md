@@ -8,7 +8,11 @@ SPANN storage mode where durable posting lists live in Aerospike. The in-RAM hea
 
 ## ComputeDistance
 
-SPTAG routine that scores tail vectors inside posting blobs after postings are fetched. Baseline query path runs this in the client; server-side distance offload is a separate target.
+SPTAG routine that scores tail vectors inside posting blobs after postings are fetched. Baseline query path runs this in the client; optional vector distance offload asks Aerospike to score listed posting records.
+
+## Owner-Local Top K
+
+Top-K scored tail-vector results computed per Aerospike partition owner for requested head IDs. SPTAG still performs global merge across owners and heads.
 
 ## Extra searcher
 
@@ -41,3 +45,11 @@ One embedding inside a posting list. The unit distance is computed against durin
 ## VectorIndex
 
 In-process SPTAG search object after `LoadIndex`. Holds query-time head index state. Not the Aerospike server and not shared across processes unless each process loads its own copy.
+
+## VECTOR_DISTANCE
+
+Aerospike operation that scores posting records for a query vector and returns owner-local scored results plus per-key statuses.
+
+## Vector distance offload
+
+Optional SPANN query mode where Aerospike computes distances for listed posting records, while SPTAG keeps head graph traversal and final result merge.

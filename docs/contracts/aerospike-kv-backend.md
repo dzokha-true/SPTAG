@@ -43,11 +43,13 @@ Defines `SPTAG_AEROSPIKE_DEFAULT_*` macros used when env vars are unset.
 | `SPTAG_AEROSPIKE_BIN` | Bytes bin name for posting payload |
 | `SPTAG_AEROSPIKE_USER` | Optional username |
 | `SPTAG_AEROSPIKE_PASSWORD` | Optional password |
+| `SPTAG_AS_VECTOR_DISTANCE` | Optional offload override; accepts `1/true/yes/on` and `0/false/no/off` |
 
 ### Index INI
 
 ```ini
 Storage=AEROSPIKEIO
+VectorDistanceOffload=false
 ```
 
 See `benchmark.aerospike.ini` for a full benchmark example.
@@ -63,6 +65,7 @@ All operations require a successful `aerospike_connect` (`Available() == true`).
 | `Put` | `aerospike_key_put` | Replace bin with raw bytes |
 | `Merge` | `aerospike_key_operate` append | `as_operations_add_append_raw` on value bin; empty value → success no-op |
 | `Delete` | `aerospike_key_remove` | `AEROSPIKE_ERR_RECORD_NOT_FOUND` treated as success |
+| `VectorDistance` | `aerospike_vector_distance` | Optional EC528 offload API; scores requested head posting records and returns scored hits plus per-key statuses |
 | `Checkpoint` | — | No-op success (persistence is server-side) |
 | `ShutDown` | `aerospike_close` / `aerospike_destroy` | Close client |
 
@@ -102,5 +105,5 @@ export SPTAG_RUN_AEROSPIKE_TEST=1
 ## Out of scope (this contract)
 
 - ANN graph storage or traversal in Aerospike
-- Server-side distance (`VECTOR_DISTANCE`) on tail vectors
+- New server/client protocol for distance offload
 - Lua UDFs on the query path

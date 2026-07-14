@@ -108,6 +108,7 @@ namespace SPTAG {
             float m_preReassignRatio;
             bool m_enableWAL;
             bool m_disableCheckpoint;
+            bool m_vectorDistanceOffload;
 
             // GPU building
             int m_gpuSSDNumTrees;

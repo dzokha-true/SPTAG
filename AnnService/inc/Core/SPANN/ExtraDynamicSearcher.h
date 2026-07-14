@@ -17,6 +17,7 @@
 #include "PersistentBuffer.h"
 #include "inc/Core/Common/PostingSizeRecord.h"
 #include "ExtraFileController.h"
+#include "VectorDistanceOffload.h"
 #include <chrono>
 #include <cstdint>
 #include <map>
@@ -199,6 +200,8 @@ namespace SPTAG::SPANN {
 
         COMMON::VersionLabel* m_versionMap;
         Options* m_opt;
+        bool m_vectorDistanceOffload = false;
+        bool m_vectorDistanceUnavailable = false;
 
         std::mutex m_dataAddLock;
 
@@ -224,6 +227,7 @@ namespace SPTAG::SPANN {
     public:
         ExtraDynamicSearcher(SPANN::Options& p_opt) {
             m_opt = &p_opt;
+            m_vectorDistanceOffload = VectorDistanceOffload::ResolveEnabled(p_opt.m_vectorDistanceOffload);
             m_metaDataSize = sizeof(int) + sizeof(uint8_t);
             m_vectorInfoSize = p_opt.m_dim * sizeof(ValueType) + m_metaDataSize;
             p_opt.m_postingPageLimit = max(p_opt.m_postingPageLimit, static_cast<int>((p_opt.m_postingVectorLimit * m_vectorInfoSize + PageSize - 1) / PageSize));
@@ -259,6 +263,12 @@ namespace SPTAG::SPANN {
             else if (p_opt.m_storage == Storage::AEROSPIKEIO) {
 #ifdef AEROSPIKE
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "ExtraDynamicSearcher:UseAerospike\n");
+                if (m_vectorDistanceOffload && !VectorDistanceOffload::BuildSupportsVectorDistance())
+                {
+                    m_vectorDistanceUnavailable = true;
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                        "ExtraDynamicSearcher:VECTOR_DISTANCE offload enabled but EC528 Aerospike client API is unavailable. Rebuild with aerospike/aerospike_vector_distance.h support.\n");
+                }
 
                 std::string host = SPTAG_AEROSPIKE_DEFAULT_HOST;
                 uint16_t port = static_cast<uint16_t>(SPTAG_AEROSPIKE_DEFAULT_PORT);
@@ -292,10 +302,23 @@ namespace SPTAG::SPANN {
 
                 db.reset(new Helper::AerospikeKeyValueIO(host, port, ns, setName, valueBin, user, password));
 #else
+                if (m_vectorDistanceOffload)
+                {
+                    m_vectorDistanceUnavailable = true;
+                    SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                        "ExtraDynamicSearcher:VECTOR_DISTANCE offload enabled but Aerospike client support is unavailable. Rebuild with -DAEROSPIKE=ON and EC528 vector-distance headers.\n");
+                }
                 SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
                     "ExtraDynamicSearcher:Aerospike unsupported! Use -DAEROSPIKE=ON when doing cmake.\n");
                 return;
 #endif
+            }
+
+            if (m_vectorDistanceOffload && p_opt.m_storage != Storage::AEROSPIKEIO)
+            {
+                m_vectorDistanceUnavailable = true;
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                    "ExtraDynamicSearcher:VECTOR_DISTANCE offload requires Storage=AEROSPIKEIO.\n");
             }
 
             
@@ -317,7 +340,7 @@ namespace SPTAG::SPANN {
 
         virtual bool Available() override
         {
-            return db->Available();
+            return db != nullptr && db->Available() && !m_vectorDistanceUnavailable;
         }
 
         //headCandidates: search data structrue for "vid" vector
@@ -1918,6 +1941,14 @@ namespace SPTAG::SPANN {
             std::chrono::microseconds remainLimit;
             if (p_stats) remainLimit = m_hardLatencyLimit - std::chrono::microseconds((int)p_stats->m_totalLatency);
             else remainLimit = m_hardLatencyLimit;
+
+            if (VectorDistanceOffload::ShouldUse(m_vectorDistanceOffload, truth, found))
+            {
+                return VectorDistanceOffload::Run(db.get(), m_versionMap, p_exWorkSpace->m_postingIDs,
+                                                  &(p_exWorkSpace->m_deduper), &(p_exWorkSpace->m_diskRequests),
+                                                  queryResults, p_stats, m_opt->m_dim, remainLimit,
+                                                  m_vectorDistanceUnavailable);
+            }
 
             auto readStart = std::chrono::high_resolution_clock::now();
             if (db->MultiGet(p_exWorkSpace->m_postingIDs, p_exWorkSpace->m_pageBuffers, remainLimit, &(p_exWorkSpace->m_diskRequests)) != ErrorCode::Success ||

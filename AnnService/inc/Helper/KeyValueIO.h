@@ -3,6 +3,7 @@
 
 #include "inc/Core/Common.h"
 #include "inc/Helper/DiskIO.h"
+#include <cstdint>
 #include <vector>
 #include <chrono>
 
@@ -10,6 +11,20 @@ namespace SPTAG
 {
     namespace Helper
     {
+        struct VectorDistanceResult
+        {
+            SizeType HeadID;
+            SizeType VID;
+            std::uint8_t Version;
+            float Distance;
+        };
+
+        struct VectorDistanceKeyStatus
+        {
+            SizeType HeadID;
+            std::uint8_t Status;
+        };
+
         class KeyValueIO {
         public:
             KeyValueIO() {}
@@ -29,6 +44,15 @@ namespace SPTAG
             virtual ErrorCode MultiGet(const std::vector<SizeType>& keys, std::vector<std::string>* values, const std::chrono::microseconds& timeout, std::vector<Helper::AsyncReadRequest>* reqs) = 0;
 
             virtual ErrorCode MultiGet(const std::vector<std::string>& keys, std::vector<std::string>* values, const std::chrono::microseconds &timeout, std::vector<Helper::AsyncReadRequest>* reqs) { return ErrorCode::Undefined; }            
+
+            virtual ErrorCode VectorDistance(const std::vector<SizeType>& headIDs, const void* query, std::uint16_t querySize,
+                                             std::uint32_t topK, std::vector<VectorDistanceResult>* results,
+                                             std::vector<VectorDistanceKeyStatus>* keyStatuses,
+                                             const std::chrono::microseconds& timeout,
+                                             std::vector<Helper::AsyncReadRequest>* reqs)
+            {
+                return ErrorCode::Undefined;
+            }
  
             virtual ErrorCode Put(const std::string& key, const std::string& value, const std::chrono::microseconds& timeout, std::vector<Helper::AsyncReadRequest>* reqs) { return ErrorCode::Undefined; }
 

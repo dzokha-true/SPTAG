@@ -195,6 +195,26 @@ if (AEROSPIKE)
     if (AEROSPIKE_INCLUDE_DIR AND AEROSPIKE_CLIENT_LIBRARY)
         list(APPEND AEROSPIKE_LIBRARIES ${AEROSPIKE_CLIENT_LIBRARY} ssl crypto yaml z m pthread)
         add_definitions(-DAEROSPIKE)
+        include(CheckCSourceCompiles)
+        set(CMAKE_REQUIRED_INCLUDES ${AEROSPIKE_INCLUDE_DIR})
+        set(CMAKE_REQUIRED_LIBRARIES ${AEROSPIKE_LIBRARIES})
+        check_c_source_compiles("
+            #include <stdint.h>
+            #include <aerospike/aerospike.h>
+            #include <aerospike/aerospike_vector_distance.h>
+            int main(void) {
+                (void)aerospike_vector_distance;
+                return 0;
+            }
+        " SPTAG_HAS_AEROSPIKE_VECTOR_DISTANCE)
+        unset(CMAKE_REQUIRED_INCLUDES)
+        unset(CMAKE_REQUIRED_LIBRARIES)
+        if (SPTAG_HAS_AEROSPIKE_VECTOR_DISTANCE)
+            add_definitions(-DSPTAG_HAS_AEROSPIKE_VECTOR_DISTANCE)
+            message(STATUS "Aerospike VECTOR_DISTANCE API: found")
+        else()
+            message(STATUS "Aerospike VECTOR_DISTANCE API: not found")
+        endif()
         add_definitions(-DSPTAG_AEROSPIKE_DEFAULT_HOST="${AEROSPIKE_DEFAULT_HOST}")
         add_definitions(-DSPTAG_AEROSPIKE_DEFAULT_PORT=${AEROSPIKE_DEFAULT_PORT})
         add_definitions(-DSPTAG_AEROSPIKE_DEFAULT_NAMESPACE="${AEROSPIKE_DEFAULT_NAMESPACE}")

@@ -1,6 +1,7 @@
 #include "inc/Helper/AerospikeKeyValueIO.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <limits>
@@ -18,6 +19,9 @@
 #include <aerospike/as_policy.h>
 #include <aerospike/as_record.h>
 #include <aerospike/as_status.h>
+#ifdef SPTAG_HAS_AEROSPIKE_VECTOR_DISTANCE
+#include <aerospike/aerospike_vector_distance.h>
+#endif
 #endif
 
 namespace SPTAG::Helper
@@ -357,6 +361,98 @@ ErrorCode AerospikeKeyValueIO::MultiGet(const std::vector<SizeType> &keys,
         values[i].SetAvailableSize(results[i].size());
     }
     return ErrorCode::Success;
+}
+
+ErrorCode AerospikeKeyValueIO::VectorDistance(const std::vector<SizeType> &headIDs, const void *query,
+                                              std::uint16_t querySize, std::uint32_t topK,
+                                              std::vector<VectorDistanceResult> *results,
+                                              std::vector<VectorDistanceKeyStatus> *keyStatuses,
+                                              const std::chrono::microseconds &timeout,
+                                              std::vector<Helper::AsyncReadRequest> * /*reqs*/)
+{
+    if (results == nullptr || keyStatuses == nullptr || query == nullptr || querySize == 0 || !m_connected)
+    {
+        return ErrorCode::Fail;
+    }
+
+    results->clear();
+    keyStatuses->clear();
+    if (headIDs.empty() || topK == 0)
+    {
+        return ErrorCode::Success;
+    }
+
+#if defined(AEROSPIKE) && defined(SPTAG_HAS_AEROSPIKE_VECTOR_DISTANCE)
+    if (headIDs.size() > std::numeric_limits<std::uint32_t>::max())
+    {
+        return ErrorCode::Fail;
+    }
+
+    std::vector<int64_t> keys;
+    keys.reserve(headIDs.size());
+    for (SizeType headID : headIDs)
+    {
+        keys.push_back(static_cast<int64_t>(headID));
+    }
+
+    as_error err{};
+    as_policy_batch policy;
+    as_policy_batch_init(&policy);
+    policy.base.total_timeout = static_cast<uint32_t>(ToMilliseconds(timeout).count());
+    policy.base.socket_timeout = policy.base.total_timeout;
+    policy.concurrent = true;
+
+    as_vector_distance_result rawResult;
+    as_vector_distance_result_init(&rawResult);
+    as_status status = aerospike_vector_distance(&m_as, &err, &policy, m_namespace.c_str(), m_setName.c_str(),
+                                                 m_valueBin.c_str(), topK, static_cast<const uint8_t *>(query),
+                                                 querySize, keys.data(), static_cast<uint32_t>(keys.size()),
+                                                 &rawResult);
+
+    for (uint32_t gi = 0; gi < rawResult.owner_groups.size; ++gi)
+    {
+        const as_vector_distance_owner_group &group = rawResult.owner_groups.entries[gi];
+        for (uint32_t ri = 0; ri < group.results.size; ++ri)
+        {
+            const as_vd_scored_result &hit = group.results.entries[ri];
+            results->push_back(VectorDistanceResult{
+                static_cast<SizeType>(hit.head_id_key),
+                static_cast<SizeType>(hit.vid),
+                hit.version,
+                hit.distance});
+        }
+        for (uint32_t si = 0; si < group.key_statuses.size; ++si)
+        {
+            const as_vd_key_status_entry &keyStatus = group.key_statuses.entries[si];
+            keyStatuses->push_back(VectorDistanceKeyStatus{
+                static_cast<SizeType>(keyStatus.head_id_key),
+                keyStatus.key_status});
+        }
+    }
+
+    as_vector_distance_result_destroy(&rawResult);
+    if (status != AEROSPIKE_OK)
+    {
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "Aerospike VECTOR_DISTANCE failed: heads=%u topk=%u query_size=%u host=%s port=%u namespace=%s set=%s bin=%s status=%d code=%d message=%s\n",
+                     static_cast<uint32_t>(keys.size()), topK, querySize, m_host.c_str(), m_port,
+                     m_namespace.c_str(), m_setName.c_str(), m_valueBin.c_str(), status, err.code, err.message);
+        fprintf(stderr,
+                "Aerospike VECTOR_DISTANCE failed: heads=%u topk=%u query_size=%u host=%s port=%u namespace=%s set=%s bin=%s status=%d code=%d message=%s\n",
+                static_cast<uint32_t>(keys.size()), topK, querySize, m_host.c_str(), m_port,
+                m_namespace.c_str(), m_setName.c_str(), m_valueBin.c_str(), status, err.code, err.message);
+        return ErrorCode::Fail;
+    }
+
+    return ErrorCode::Success;
+#else
+    (void)headIDs;
+    (void)topK;
+    (void)timeout;
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                 "Aerospike VECTOR_DISTANCE unsupported: EC528 client API not detected at build time.\n");
+    return ErrorCode::Undefined;
+#endif
 }
 
 ErrorCode AerospikeKeyValueIO::Put(const SizeType key, const std::string &value,

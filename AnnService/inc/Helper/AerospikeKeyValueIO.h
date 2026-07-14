@@ -38,6 +38,12 @@ class AerospikeKeyValueIO final : public KeyValueIO
     ErrorCode MultiGet(const std::vector<SizeType> &keys, std::vector<SPTAG::Helper::PageBuffer<std::uint8_t>> &values,
                        const std::chrono::microseconds &timeout, std::vector<Helper::AsyncReadRequest> *reqs) override;
 
+    ErrorCode VectorDistance(const std::vector<SizeType> &headIDs, const void *query, std::uint16_t querySize,
+                             std::uint32_t topK, std::vector<VectorDistanceResult> *results,
+                             std::vector<VectorDistanceKeyStatus> *keyStatuses,
+                             const std::chrono::microseconds &timeout,
+                             std::vector<Helper::AsyncReadRequest> *reqs) override;
+
     ErrorCode Put(const SizeType key, const std::string &value, const std::chrono::microseconds &timeout,
                   std::vector<Helper::AsyncReadRequest> *reqs) override;
 
