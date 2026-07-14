@@ -25,6 +25,11 @@ Alternatives considered:
 
 ## Consequences
 
+- Quantized indexes are refused by the offload path (fail fast before any
+  KV call): the wire query must be raw `dim * sizeof(ValueType)` bytes,
+  while a quantizer encodes the query target to `IQuantizer::QuantizeSize()`
+  bytes. Disable `VectorDistanceOffload` or the quantizer.
+
 - `Storage=AEROSPIKEIO` remains a posting-list backend, not a full ANN graph backend.
 - Index configuration and Aerospike namespace vector configuration must agree before offload is enabled.
 - Offload observability is limited to request latency and returned hit counts in V1.

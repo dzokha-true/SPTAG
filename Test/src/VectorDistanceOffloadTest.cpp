@@ -256,7 +256,7 @@ BOOST_AUTO_TEST_CASE(EnabledPathCallsVectorDistanceAndMergesHits)
     FakeStats stats;
 
     auto ret = SPTAG::SPANN::VectorDistanceOffload::Run(&db, &versionMap, headIDs, &deduper, nullptr,
-                                                        results, &stats, 2, SPTAG::MaxTimeout, false);
+                                                        results, &stats, 2, SPTAG::MaxTimeout, false, false);
 
     BOOST_CHECK(ret == ErrorCode::Success);
     BOOST_CHECK_EQUAL(db.vectorDistanceCalls, 1);
@@ -294,7 +294,7 @@ BOOST_AUTO_TEST_CASE(FiltersDeletedVersionMismatchDuplicateAndOutOfRangeHits)
 
     auto ret = SPTAG::SPANN::VectorDistanceOffload::Run(&db, &versionMap, headIDs, &deduper, nullptr,
                                                         results, static_cast<FakeStats*>(nullptr), 2,
-                                                        SPTAG::MaxTimeout, false);
+                                                        SPTAG::MaxTimeout, false, false);
 
     BOOST_CHECK(ret == ErrorCode::Success);
     BOOST_CHECK(HasVID(results, 2));
@@ -320,7 +320,7 @@ BOOST_AUTO_TEST_CASE(NonzeroKeyStatusFailsFast)
 
     auto ret = SPTAG::SPANN::VectorDistanceOffload::Run(&db, &versionMap, headIDs, &deduper, nullptr,
                                                         results, static_cast<FakeStats*>(nullptr), 2,
-                                                        SPTAG::MaxTimeout, false);
+                                                        SPTAG::MaxTimeout, false, false);
 
     BOOST_CHECK(ret == ErrorCode::DiskIOFail);
     BOOST_CHECK_EQUAL(db.vectorDistanceCalls, 1);
@@ -341,10 +341,34 @@ BOOST_AUTO_TEST_CASE(VectorApiErrorFailsFast)
 
     auto ret = SPTAG::SPANN::VectorDistanceOffload::Run(&db, &versionMap, headIDs, &deduper, nullptr,
                                                         results, static_cast<FakeStats*>(nullptr), 2,
-                                                        SPTAG::MaxTimeout, false);
+                                                        SPTAG::MaxTimeout, false, false);
 
     BOOST_CHECK(ret == ErrorCode::DiskIOFail);
     BOOST_CHECK_EQUAL(db.vectorDistanceCalls, 1);
+}
+
+BOOST_AUTO_TEST_CASE(QuantizerActiveFailsFastWithoutKvCall)
+{
+    FakeKeyValueIO db;
+    SPTAG::COMMON::VersionLabel versionMap;
+    InitializeVersionMap(&versionMap);
+    std::vector<SPTAG::SizeType> headIDs = {10, 11};
+    SPTAG::COMMON::OptHashPosVector deduper;
+    InitializeDeduper(&deduper);
+    float query[2] = {1.0f, 2.0f};
+    SPTAG::COMMON::QueryResultSet<float> results(query, 3);
+    results.Reset();
+    FakeStats stats;
+
+    // Quantizer active: the raw dim*sizeof(ValueType) wire size no longer
+    // matches the encoded query buffer, so the offload must refuse before
+    // any KV call - no silent fallback, no mis-sized request.
+    auto ret = SPTAG::SPANN::VectorDistanceOffload::Run(&db, &versionMap, headIDs, &deduper, nullptr,
+                                                        results, &stats, 2, SPTAG::MaxTimeout, false, true);
+
+    BOOST_CHECK(ret == ErrorCode::DiskIOFail);
+    BOOST_CHECK_EQUAL(db.vectorDistanceCalls, 0);
+    BOOST_CHECK_EQUAL(db.multiGetPageCalls, 0);
 }
 
 BOOST_AUTO_TEST_CASE(UnsupportedBuildFailsBeforeCallingVectorApi)
@@ -361,7 +385,7 @@ BOOST_AUTO_TEST_CASE(UnsupportedBuildFailsBeforeCallingVectorApi)
 
     auto ret = SPTAG::SPANN::VectorDistanceOffload::Run(&db, &versionMap, headIDs, &deduper, nullptr,
                                                         results, static_cast<FakeStats*>(nullptr), 2,
-                                                        SPTAG::MaxTimeout, true);
+                                                        SPTAG::MaxTimeout, true, false);
 
     BOOST_CHECK(ret == ErrorCode::DiskIOFail);
     BOOST_CHECK_EQUAL(db.vectorDistanceCalls, 0);

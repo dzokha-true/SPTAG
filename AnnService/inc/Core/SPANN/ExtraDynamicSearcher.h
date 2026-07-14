@@ -1947,7 +1947,8 @@ namespace SPTAG::SPANN {
                 return VectorDistanceOffload::Run(db.get(), m_versionMap, p_exWorkSpace->m_postingIDs,
                                                   &(p_exWorkSpace->m_deduper), &(p_exWorkSpace->m_diskRequests),
                                                   queryResults, p_stats, m_opt->m_dim, remainLimit,
-                                                  m_vectorDistanceUnavailable);
+                                                  m_vectorDistanceUnavailable,
+                                                  p_index->m_pQuantizer != nullptr);
             }
 
             auto readStart = std::chrono::high_resolution_clock::now();

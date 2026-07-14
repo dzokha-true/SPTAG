@@ -95,12 +95,24 @@ ErrorCode Run(Helper::KeyValueIO* db,
               StatsType* stats,
               DimensionType dim,
               const std::chrono::microseconds& timeout,
-              bool unavailable)
+              bool unavailable,
+              bool quantizerActive)
 {
     if (unavailable)
     {
         SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
                      "VECTOR_DISTANCE offload enabled but Aerospike EC528 vector-distance API is unavailable.\n");
+        return ErrorCode::DiskIOFail;
+    }
+    if (quantizerActive)
+    {
+        // The wire query must be exactly dim * sizeof(ValueType) raw bytes,
+        // but with a quantizer active GetQuantizedTarget() holds an encoded
+        // buffer of IQuantizer::QuantizeSize() bytes. Refuse rather than
+        // send a mis-sized query (ADR 0002/0004: no quantizer support, no
+        // silent fallback).
+        SPTAGLIB_LOG(Helper::LogLevel::LL_Error,
+                     "VECTOR_DISTANCE offload does not support quantized indexes; disable VectorDistanceOffload or the quantizer.\n");
         return ErrorCode::DiskIOFail;
     }
     if (db == nullptr || versionMap == nullptr || deduper == nullptr || dim <= 0)
