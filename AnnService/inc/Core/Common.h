@@ -34,8 +34,24 @@
 
 #if defined(__INTEL_COMPILER)
 #include <malloc.h>
-#else
+#elif defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
 #include <mm_malloc.h>
+#else
+// EC528: mm_malloc.h is x86-only; provide portable aligned-alloc shims for
+// other architectures (e.g. aarch64) with identical semantics.
+#include <cstdlib>
+static inline void* _mm_malloc(size_t size, size_t align)
+{
+    void* ptr = nullptr;
+    if (align < sizeof(void*)) {
+        align = sizeof(void*);
+    }
+    return posix_memalign(&ptr, align, size) == 0 ? ptr : nullptr;
+}
+static inline void _mm_free(void* ptr)
+{
+    free(ptr);
+}
 #endif
 
 #define FolderSep '/'

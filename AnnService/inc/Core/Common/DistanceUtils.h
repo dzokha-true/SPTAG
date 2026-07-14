@@ -122,11 +122,14 @@ namespace SPTAG
         template<typename T>
         inline DistanceCalcReturn<T> DistanceCalcSelector(SPTAG::DistCalcMethod p_method)
         {
+#if defined(SPTAG_ARCH_X86)
             bool isSize4 = (sizeof(T) == 4);
+#endif
             switch (p_method)
             {
             case SPTAG::DistCalcMethod::InnerProduct:
             case SPTAG::DistCalcMethod::Cosine:
+#if defined(SPTAG_ARCH_X86)
                 if (InstructionSet::AVX512())
                 {
                     return &(DistanceUtils::ComputeCosineDistance_AVX512);
@@ -142,8 +145,13 @@ namespace SPTAG
                 else {
                     return &(DistanceUtils::ComputeCosineDistance);
                 }
+#else
+                // EC528: non-x86 - portable scalar kernel.
+                return &(DistanceUtils::ComputeCosineDistance);
+#endif
 
             case SPTAG::DistCalcMethod::L2:
+#if defined(SPTAG_ARCH_X86)
                 if (InstructionSet::AVX512())
                 {
                     return &(DistanceUtils::ComputeL2Distance_AVX512);
@@ -159,6 +167,10 @@ namespace SPTAG
                 else {
                     return &(DistanceUtils::ComputeL2Distance);
                 }
+#else
+                // EC528: non-x86 - portable scalar kernel.
+                return &(DistanceUtils::ComputeL2Distance);
+#endif
 
             default:
                 break;

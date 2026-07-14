@@ -6,6 +6,9 @@
 using namespace SPTAG;
 using namespace SPTAG::COMMON;
 
+// EC528: x86-only kernel bodies (see SumCalcSelector guard).
+#if defined(SPTAG_ARCH_X86)
+
 void SIMDUtils::ComputeSum_SSE(std::int8_t *pX, const std::int8_t *pY, DimensionType length)
 {
     const std::int8_t *pEnd16 = pX + ((length >> 4) << 4);
@@ -257,3 +260,5 @@ void SIMDUtils::ComputeSum_AVX512(float *pX, const float *pY, DimensionType leng
         *pX++ += *pY++;
     }
 }
+
+#endif // SPTAG_ARCH_X86

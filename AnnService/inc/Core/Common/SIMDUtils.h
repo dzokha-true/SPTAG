@@ -58,6 +58,7 @@ namespace SPTAG
         template<typename T>
         inline SumCalcReturn<T> SumCalcSelector()
         {
+#if defined(SPTAG_ARCH_X86)
             if (InstructionSet::AVX512())
             {
                 return &(SIMDUtils::ComputeSum_AVX512);
@@ -71,6 +72,8 @@ namespace SPTAG
             {
                 return &(SIMDUtils::ComputeSum_SSE);
             }
+#endif
+            // EC528: non-x86 falls through to the portable kernel.
             return &(SIMDUtils::ComputeSum_Naive);
         }
     }

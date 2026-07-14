@@ -8,16 +8,33 @@
 
 #ifndef GPU
 
-#ifndef _MSC_VER
+// EC528: x86 headers/intrinsics only exist on x86; on other architectures
+// (e.g. aarch64) provide a prefetch shim and no CPUID. InstructionSet then
+// reports no x86 ISA support and the distance selectors fall back to the
+// portable scalar kernels. No behavior change on x86.
+#if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
+#define SPTAG_ARCH_X86 1
+#endif
+
+#if !defined(_MSC_VER) && defined(SPTAG_ARCH_X86)
 #include <cpuid.h>
 #include <xmmintrin.h>
 #include <immintrin.h>
 
 void cpuid(int info[4], int InfoType);
 
-#else
+#elif defined(_MSC_VER) && defined(SPTAG_ARCH_X86)
 #include <intrin.h>
 #define cpuid(info, x)    __cpuidex(info, x, 0)
+#else
+#ifndef _MM_HINT_T0
+#define _MM_HINT_T0 3
+#endif
+static inline void _mm_prefetch(const char* p, int hint)
+{
+    (void)hint;
+    __builtin_prefetch(p);
+}
 #endif
 
 #endif

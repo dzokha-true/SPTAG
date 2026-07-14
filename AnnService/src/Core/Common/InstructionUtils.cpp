@@ -1,7 +1,7 @@
 #include "inc/Core/Common/InstructionUtils.h"
 #include "inc/Core/Common.h"
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) && defined(SPTAG_ARCH_X86)
 void cpuid(int info[4], int InfoType)
 {
     __cpuid_count(InfoType, 0, info[0], info[1], info[2], info[3]);
@@ -55,6 +55,11 @@ void InstructionSet::PrintInstructionSet(void)
 InstructionSet::InstructionSet_Internal::InstructionSet_Internal()
     : HW_SSE{false}, HW_SSE2{false}, HW_AVX{false}, HW_AVX512{false}, HW_AVX2{false}
 {
+// EC528: no CPUID on non-x86 - all x86 ISA flags stay false and the
+// selectors use the scalar kernels.
+#if !defined(SPTAG_ARCH_X86)
+    SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Using NONE InstructionSet (non-x86)!\n");
+#else
     int info[4];
     cpuid(info, 0);
     int nIds = info[0];
@@ -92,6 +97,7 @@ InstructionSet::InstructionSet_Internal::InstructionSet_Internal()
         SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Using SSE InstructionSet!\n");
     else
         SPTAGLIB_LOG(Helper::LogLevel::LL_Info, "Using NONE InstructionSet!\n");
+#endif // SPTAG_ARCH_X86
 }
 } // namespace COMMON
 } // namespace SPTAG

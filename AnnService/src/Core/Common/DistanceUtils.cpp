@@ -6,6 +6,11 @@
 using namespace SPTAG;
 using namespace SPTAG::COMMON;
 
+// EC528: x86 SIMD kernel bodies only compile on x86; on other architectures
+// the selectors return the scalar kernels and none of these symbols are
+// referenced.
+#if defined(SPTAG_ARCH_X86)
+
 #ifndef _MSC_VER
 #define DIFF128 diff128
 #define DIFF256 diff256
@@ -1245,3 +1250,5 @@ float DistanceUtils::ComputeCosineDistance_AVX512(const float *pX, const float *
         diff += (*pX++) * (*pY++);
     return 1 - diff;
 }
+
+#endif // SPTAG_ARCH_X86

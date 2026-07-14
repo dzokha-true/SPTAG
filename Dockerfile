@@ -3,20 +3,26 @@ WORKDIR /app
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get -y install wget build-essential swig cmake git libnuma-dev python3.8-dev python3-distutils gcc-8 g++-8 \
+RUN apt-get update && apt-get -y install wget build-essential swig cmake git pkg-config libnuma-dev python3.8-dev python3-distutils gcc-8 g++-8 \
     libboost-filesystem-dev libboost-test-dev libboost-serialization-dev libboost-regex-dev libboost-serialization-dev libboost-regex-dev libboost-thread-dev libboost-system-dev libtbb-dev \
     libssl-dev libyaml-dev zlib1g-dev
 
 RUN wget https://bootstrap.pypa.io/pip/3.8/get-pip.py && python3.8 get-pip.py && python3.8 -m pip install numpy
 
-# Aerospike C client (for optional -DAEROSPIKE=ON image builds)
+# EC528 forked Aerospike C client, built from source (VECTOR_DISTANCE wire
+# support; master commit 9ae3eda3+). The stock aerospike.com client tarball
+# lacks aerospike_vector_distance.h and only ships x86_64 - do not reintroduce
+# it. Full (non-shallow) clone: submodule pins need not be branch tips.
 RUN cd /tmp && \
-    wget -q https://download.aerospike.com/artifacts/aerospike-client-c/7.3.0/aerospike-client-c_7.3.0_ubuntu20.04_x86_64.tgz && \
-    tar -xzf aerospike-client-c_7.3.0_ubuntu20.04_x86_64.tgz && \
-    cd aerospike-client-c_7.3.0_ubuntu20.04_x86_64 && \
-    dpkg -i *.deb && \
-    apt-get -f -y install && \
-    rm -rf /tmp/aerospike-client-c_7.3.0_ubuntu20.04_x86_64*
+    git clone --recursive -b ec528/modules-abs-path https://github.com/dzokha-true/aerospike-client-c.git && \
+    cd aerospike-client-c && \
+    make && \
+    TARGET_DIR=$(ls -d target/Linux-*) && \
+    cp -a "$TARGET_DIR/include/." /usr/local/include/ && \
+    cp -a "$TARGET_DIR/lib/." /usr/local/lib/ && \
+    ldconfig && \
+    test -f /usr/local/include/aerospike/aerospike_vector_distance.h && \
+    cd /tmp && rm -rf aerospike-client-c
 
 ENV PYTHONPATH=/app/Release
 
@@ -37,3 +43,16 @@ RUN export CC=/usr/bin/gcc-8 && export CXX=/usr/bin/g++-8 && mkdir build && cd b
         -DAEROSPIKE_INCLUDE_DIR="$AS_INC" \
         -DAEROSPIKE_CLIENT_LIBRARY="$AS_LIB" && \
     make -j$(nproc) && cd ..
+
+# EC528: the offload build is only real if the VECTOR_DISTANCE probe passed.
+# Fail the image build loudly otherwise; write the marker only on success.
+RUN if grep -q '^SPTAG_HAS_AEROSPIKE_VECTOR_DISTANCE:INTERNAL=1$' /app/build/CMakeCache.txt; then \
+        echo 'SPTAG_HAS_AEROSPIKE_VECTOR_DISTANCE=1' > /app/build/offload_probe_ok; \
+    else \
+        echo 'FATAL: aerospike_vector_distance.h probe failed - offload build is not real' >&2; \
+        grep -n 'SPTAG_HAS_AEROSPIKE_VECTOR_DISTANCE' /app/build/CMakeCache.txt >&2 || true; \
+        exit 1; \
+    fi
+
+COPY Script_AE/run-offload-tests.sh /app/run-offload-tests.sh
+RUN chmod +x /app/run-offload-tests.sh
