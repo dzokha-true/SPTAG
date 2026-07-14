@@ -1346,6 +1346,14 @@ namespace SPTAG::SPANN {
                 }
             }
 
+            if (m_splitThreadPool == nullptr) {
+                // EC528: read-only search (Update=false) never initializes
+                // the SPFresh pools; skip background merge instead of
+                // crashing on a null pool.
+                SPTAGLIB_LOG(Helper::LogLevel::LL_Debug,
+                    "MergeAsync skipped: thread pool not initialized (read-only search)\n");
+                return;
+            }
             auto* curJob = new MergeAsyncJob(p_index, this, headID, m_opt->m_disableReassign, p_callback);
             m_splitThreadPool->add(curJob);
         }
