@@ -13,10 +13,14 @@ RUN wget https://bootstrap.pypa.io/pip/3.8/get-pip.py && python3.8 get-pip.py &&
 # support; master commit 9ae3eda3+). The stock aerospike.com client tarball
 # lacks aerospike_vector_distance.h and only ships x86_64 - do not reintroduce
 # it. Full (non-shallow) clone: submodule pins need not be branch tips.
+ARG AEROSPIKE_CLIENT_REF=550b794adbeffcde52660bfacba4a66f7ba1e616
+ARG BUILD_JOBS=2
 RUN cd /tmp && \
-    git clone --recursive -b ec528/modules-abs-path https://github.com/dzokha-true/aerospike-client-c.git && \
+    git clone --no-checkout https://github.com/dzokha-true/aerospike-client-c.git && \
     cd aerospike-client-c && \
-    make && \
+    git checkout "$AEROSPIKE_CLIENT_REF" && \
+    git submodule update --init --recursive && \
+    make -j"$BUILD_JOBS" && \
     TARGET_DIR=$(ls -d target/Linux-*) && \
     cp -a "$TARGET_DIR/include/." /usr/local/include/ && \
     cp -a "$TARGET_DIR/lib/." /usr/local/lib/ && \
@@ -42,7 +46,7 @@ RUN export CC=/usr/bin/gcc-8 && export CXX=/usr/bin/g++-8 && mkdir build && cd b
         -DAEROSPIKE=ON \
         -DAEROSPIKE_INCLUDE_DIR="$AS_INC" \
         -DAEROSPIKE_CLIENT_LIBRARY="$AS_LIB" && \
-    make -j$(nproc) && cd ..
+    make -j"$BUILD_JOBS" && cd ..
 
 # EC528: the offload build is only real if the VECTOR_DISTANCE probe passed.
 # Fail the image build loudly otherwise; write the marker only on success.
