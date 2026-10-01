@@ -1,0 +1,71 @@
+name: Public offload CI
+
+on:
+  push:
+    branches: [factory/simd-vector-search, 'codex/public-research-*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x86:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+          persist-credentials: false
+      - name: Fetch public build dependency and record source
+        run: |
+          git submodule update --init ThirdParty/zstd
+          mkdir -p ci-artifacts
+          { git rev-parse HEAD; git submodule status; uname -a; lscpu; docker version; } > ci-artifacts/environment.txt
+      - name: Build this SPTAG checkout with the pinned public C client
+        run: docker build --progress=plain -t sptag-offload:ci . 2>&1 | tee ci-artifacts/build.log
+      - name: Offload unit tests with real client support
+        run: docker run --rm sptag-offload:ci /app/run-offload-tests.sh 2>&1 | tee ci-artifacts/offload-tests.log
+      - name: Result parity and independent recall evaluator regression tests
+        run: |
+          docker run --rm -v "$PWD":/src:ro -w /src sptag-offload:ci bash -euc '
+            python3.8 -m unittest discover -s tests/integration/offload -p "test_*.py"
+            python3.8 -m unittest discover -s tests/benchmark/offload -p "test_*.py"
+          ' 2>&1 | tee ci-artifacts/evaluator-tests.log
+      - name: Checkout pinned public CE companion
+        uses: actions/checkout@v4
+        with:
+          repository: dzokha-true/aerospike-server
+          ref: 62b44c7a97fc1649f43e32466ad267e38d2474f5
+          submodules: recursive
+          fetch-depth: 0 # server version is derived from reachable release tags
+          path: ci-server
+          persist-credentials: false
+      - name: Fetch pinned public release tag for the companion version
+        working-directory: ci-server
+        run: |
+          git fetch --no-recurse-submodules https://github.com/aerospike/aerospike-server.git refs/tags/8.1.1.2:refs/tags/8.1.1.2
+          test "$(git rev-parse '8.1.1.2^{commit}')" = 783cd07537a83bae5aaa851cc1a6f7244e8e3b73
+          git merge-base --is-ancestor 8.1.1.2 HEAD
+      - name: Build companion server
+        run: docker build --progress=plain -f ci-server/docker/Dockerfile -t as-vector:ci ci-server 2>&1 | tee ci-artifacts/server-build.log
+      - name: Seeded single-node end-to-end parity
+        env:
+          SERVER_IMAGE: as-vector:ci
+          SPTAG_IMAGE: sptag-offload:ci
+        run: bash tests/integration/offload/run.sh 2>&1 | tee ci-artifacts/integration.log
+      - name: Retain build and test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-offload-ci-${{ github.sha }}
+          path: |
+            ci-artifacts/
+            tests/integration/offload/runs/**/*.bin
+            tests/integration/offload/runs/**/*.log
+            tests/integration/offload/runs/**/*inspect.json
+          retention-days: 14

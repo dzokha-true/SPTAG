@@ -1,0 +1,38 @@
+{
+  "metric": "exact squared L2; float64 oracle; ties ordered by VID",
+  "vectors": 100000,
+  "queries": 1000,
+  "dimension": 768,
+  "k": 10,
+  "base_sha256": "d4a26d04ecd51c82ad99e67cb7c6cb0b2ef231f35bc7edc022e7c71419e7f0b7",
+  "query_sha256": "96c680ac159fe337894a68438c881df001236f885b60e252bd2f65757728d6d5",
+  "results": [
+    {
+      "recall_at_k": 0.38859999999999995,
+      "worst_recall_at_k": 0.0,
+      "worst_query": 9,
+      "queries_below_0_99": 1000,
+      "distance_mismatches": 0,
+      "file": "tests/benchmark/offload/work-full/baseline.bin",
+      "sha256": "de9379ffda88274839070107cde38223fd29f881d8fb2c9f675a2fee86ffccc3"
+    },
+    {
+      "recall_at_k": 0.3885,
+      "worst_recall_at_k": 0.0,
+      "worst_query": 9,
+      "queries_below_0_99": 1000,
+      "distance_mismatches": 0,
+      "file": "tests/benchmark/offload/work-full/offload-scalar.bin",
+      "sha256": "19a066001b7971a94662be11ae78a3f68396ed7c7d2f7b6a497095ed84517009"
+    },
+    {
+      "recall_at_k": 0.3885,
+      "worst_recall_at_k": 0.0,
+      "worst_query": 9,
+      "queries_below_0_99": 1000,
+      "distance_mismatches": 0,
+      "file": "tests/benchmark/offload/work-full/offload-neon.bin",
+      "sha256": "be6924d906103652e11848b1f73e8e2d0a8caf47158b0b1fde6d24e6ac6f3548"
+    }
+  ]
+}

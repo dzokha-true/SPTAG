@@ -1,0 +1,23 @@
+{
+  "baseline": {
+    "samples": 3,
+    "qps_median": 720.9,
+    "qps_min": 695.8,
+    "qps_max": 740.2,
+    "qps_stdev": 22.26304860825074
+  },
+  "offload-scalar": {
+    "samples": 3,
+    "qps_median": 739.5,
+    "qps_min": 703.8,
+    "qps_max": 764.0,
+    "qps_stdev": 30.27314541525764
+  },
+  "offload-neon": {
+    "samples": 3,
+    "qps_median": 711.1,
+    "qps_min": 684.3,
+    "qps_max": 714.9,
+    "qps_stdev": 16.67852911180522
+  }
+}
