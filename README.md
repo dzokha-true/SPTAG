@@ -1,3 +1,29 @@
+# SPTAG research fork: distributed posting storage
+
+This fork extends Microsoft's SPTAG/SPFresh disk-ANN engine with distributed key-value posting storage. The head graph and ANN traversal stay in SPTAG; Aerospike stores posting blobs. This is student research with Microsoft Research mentorship.
+
+## Start here
+
+- **Distributed storage:** [feature/aerospike-compute](https://github.com/dzokha-true/SPTAG/tree/feature/aerospike-compute). See the [Aerospike integration commit](https://github.com/dzokha-true/SPTAG/commit/e734818fa6c275d147c95229d706c69141afd32f), [source map](https://github.com/dzokha-true/SPTAG/blob/feature/aerospike-compute/docs/guides/source-map.md), and [KV contract](https://github.com/dzokha-true/SPTAG/blob/feature/aerospike-compute/docs/contracts/aerospike-kv-backend.md).
+- **Build and verify the storage backend:** [build matrix](https://github.com/dzokha-true/SPTAG/blob/feature/aerospike-compute/docs/guides/build-matrix.md) and [test guide](https://github.com/dzokha-true/SPTAG/blob/feature/aerospike-compute/docs/guides/testing.md). Aerospike integration tests require a live cluster and opt-in configuration; the ordinary test command does not establish that those tests ran.
+- **Experimental server-side distance offload:** [factory/simd-vector-search](https://github.com/dzokha-true/SPTAG/tree/factory/simd-vector-search), with corresponding [server code](https://github.com/dzokha-true/aerospike-server/tree/factory/simd-vector-search) and [client code](https://github.com/dzokha-true/aerospike-client-c).
+
+The default branch retains the upstream code and this landing page. Follow the branch links above to inspect the research implementation.
+
+## Research results and their scope
+
+The distributed-storage study on 1M BigANN/SIFT vectors measured 10.12 ms p99 for Aerospike versus 12.14 ms for local RocksDB at equal recall, with comparable throughput of 2,872 versus 2,927 QPS. That study used a three-node NVMe Aerospike cluster on GCP with replication factor 2.
+
+The [historical offload benchmark](https://github.com/dzokha-true/SPTAG/blob/factory/simd-vector-search/docs/benchmarks/phase-4-results.md) is a separate experiment: synthetic vectors, three containers on one Apple Silicon host, replication factor 1, and a scalar client baseline. Its saved throughput numbers and [raw summary](https://github.com/dzokha-true/SPTAG/blob/factory/simd-vector-search/tests/benchmark/offload/work-full/summary.txt) need revalidation. The original comparator is too permissive about ties, and baseline overlap is not ground-truth recall. Do not combine these results with the storage study or describe them as production-cluster performance.
+
+## What to review
+
+The storage contribution is the Aerospike posting-store I/O layer, its CMake integration, and KV tests. The experimental offload work changes where tail-vector distance computation runs, so correctness depends on query encoding, distance semantics, candidate membership, and result merging as well as speed. Build/test documentation and historical benchmark output are evidence to inspect; they are not a substitute for running the checks.
+
+---
+
+## Upstream project documentation
+
 # SPTAG: A library for fast approximate nearest neighbor search
 
 [![MIT licensed](https://img.shields.io/badge/license-MIT-yellow.svg)](https://github.com/Microsoft/SPTAG/blob/master/LICENSE)
